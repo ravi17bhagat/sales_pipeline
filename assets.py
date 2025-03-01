@@ -4,7 +4,7 @@ import glob
 import os
 import dagster as dg
 
-hourly_partitions = dg.HourlyPartitionsDefinition(start_date="2024-02-20-00:00")
+hourly_partitions = dg.HourlyPartitionsDefinition(start_date="2025-02-20-00:00")
 
 # Orders Asset
 @dg.asset(
@@ -62,14 +62,14 @@ def orders(context):
 
     # Insert to sqlite Database
     with sqlite3.connect("db.sqlite3") as conn:
-        df.to_sql("orders", conn, if_exists="replace", index=False)
+        df.to_sql("orders", conn, if_exists="append", index=False)
 
     context.log.info(f"Inserted {len(df)} rows for partition {partition_hour}")
     return df
 
 # Products Asset
 @dg.asset(
-    description='This is an Products asset Product data',
+    description='This is Products asset containing Product information',
     metadata={
         "dagster/column_schema": dg.TableSchema(
             columns=[
@@ -110,25 +110,45 @@ def products(context):
 
     # Insert to sqlite Database
     with sqlite3.connect("db.sqlite3") as conn:
-        df.to_sql("products", conn, if_exists="replace", index=False)
+        df.to_sql("products", conn, if_exists="append", index=False)
 
     context.log.info(f"Inserted {len(df)} rows")
     return df
 
 # Sales Asset
-@dg.asset(deps=["orders", "products"])
+@dg.asset(
+    description='This is a Sales asset containing Orders and Products information',
+    deps=["orders", "products"],
+    metadata={
+        "dagster/column_schema": dg.TableSchema(
+            columns=[
+                dg.TableColumn("Order_ID","string",description="Unique ID for order",),
+                dg.TableColumn("Order_Timestamp","datetime",description="Time when order was placed",),
+                dg.TableColumn("Product_ID","int",description="ID of the Product",),
+                dg.TableColumn("Category","string",description="Broad Category of the product",),
+                dg.TableColumn("Sub_Category","string",description="Specific category of the product",),
+                dg.TableColumn("Product_Name","string",description="Name of the product",),
+                dg.TableColumn("Quantity","int",description="Number of units ordered",),
+                dg.TableColumn("Cost","float",description="Cost per unit for product",),
+                dg.TableColumn("Discount","float",description="Discount per unit for product",),
+                dg.TableColumn("Final_Price","float",description="Final price for the order",),
+            ]
+        )
+    },
+)
 def sales(context):
-    conn = sqlite3.connect("db.sqlite3")
+    with sqlite3.connect("db.sqlite3") as conn:
+        # Read orders and products data from db
+        orders_df = pd.read_sql("SELECT * FROM ORDERS;", conn)
+        products_df = pd.read_sql("SELECT * FROM PRODUCTS;", conn)
 
-    query = """
-    SELECT orders.`Product ID`, products.Category, Sum(orders.`Final Cost`)
-    FROM orders
-    INNER JOIN products ON orders.`Product ID` = products.`Product ID`
-    GROUP BY 1,2;
-    """
-    df = pd.read_sql(query, conn)
-    df.to_sql("sales", conn, if_exists="replace", index=False)
-    context.log.info(f"Sample data: {df.head()}")
+        # Join the 2 dataframes on Product_ID
+        sales_df = pd.merge(orders_df, products_df, on="Product_ID", how="inner")
 
-    conn.close()
-    return df
+        # Filter the required columns
+        sales_df = sales_df.filter(["Order_ID","Order_Timestamp","Product_ID","Category","Sub_Category","Product_Name","Quantity","Cost","Discount","Final_Price"])
+        context.log.info(f"Sample data: {sales_df.head()}")
+
+        # Insert to sqlite Database
+        sales_df.to_sql("sales", conn, if_exists="append", index=False)
+    return sales_df
