@@ -4,3 +4,4 @@ dagster-pipes==1.10.3
 dagster-webserver==1.10.3
 SQLAlchemy==2.0.38
 pandas==2.2.3
+pytest==8.3.5
