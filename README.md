@@ -10,7 +10,7 @@ sales_pipeline/
 │-- jobs.py               # Job definitions
 │-- repository.py         # Dagster project definitions
 │-- db.sqlite3            # Sqlite3 DB
-│-- tests/                # Test cases for assets and jobs
+│-- tests/                # Unit Tests for assets
 │-- requirements.txt      # Dependencies
 ```
 
@@ -56,4 +56,12 @@ sqlite3 db.sqlite3
 select * from orders;
 select * from products;
 select * from sales;
+```
+
+## Running Tests
+
+1. Navigate to root directory of the project
+2. Execute unit tests using below command
+```sh
+pytest
 ```
